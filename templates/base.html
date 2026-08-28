@@ -106,7 +106,53 @@
 </div>
 
 
+<div class="toast" id="toast">
+    <span class="toast-mark">✓</span>
+    <span id="toastText">Downloaded correctly</span>
+</div>
+
+
 <script>
+
+function hideVeil() {
+
+    document.getElementById("veil")
+        .classList.remove("on");
+
+}
+
+
+function showToast(message) {
+
+    const toast =
+        document.getElementById("toast");
+
+    document.getElementById("toastText")
+        .textContent = message;
+
+    // Si la barra de descarga está visible,
+    // el aviso se coloca por encima de ella.
+    const dock =
+        document.querySelector(".dock.up");
+
+    toast.classList.toggle(
+        "above-dock",
+        Boolean(dock)
+    );
+
+    toast.classList.add("up");
+
+    clearTimeout(window.toastTimer);
+
+    window.toastTimer = setTimeout(
+        function () {
+            toast.classList.remove("up");
+        },
+        4500
+    );
+
+}
+
 
 function showVeil(title, note) {
 

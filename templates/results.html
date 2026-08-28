@@ -99,6 +99,8 @@
 
         <input type="hidden" name="ticker" value="{{ ticker }}">
 
+        <input type="hidden" name="token" id="dlToken">
+
 
         <!-- ==========================================
              FILTROS
@@ -377,12 +379,68 @@ document
             return;
         }
 
+        const token =
+            String(Date.now()) +
+            "-" +
+            Math.random().toString(36).slice(2);
+
+        document.getElementById("dlToken")
+            .value = token;
+
         showVeil(
             "Rendering " + count + " document" + (count > 1 ? "s" : ""),
             "Fetching from EDGAR · printing to PDF · this can take a minute"
         );
 
+        waitForDownload(token, count);
+
     });
+
+
+function waitForDownload(token, count) {
+
+    const started = Date.now();
+
+    const timer = setInterval(function () {
+
+        const done =
+            document.cookie.indexOf(
+                "download_done=" + token
+            ) !== -1;
+
+        if (done) {
+
+            clearInterval(timer);
+
+            // Consumir la señal para que no
+            // vuelva a dispararse.
+            document.cookie =
+                "download_done=; Max-Age=0; path=/";
+
+            hideVeil();
+
+            showToast(
+                count > 1
+                    ? count + " documents downloaded"
+                    : "Downloaded correctly"
+            );
+
+            return;
+        }
+
+        // Si algo va mal y no llega la señal,
+        // no dejamos la pantalla bloqueada.
+        if (Date.now() - started > 15 * 60 * 1000) {
+
+            clearInterval(timer);
+
+            hideVeil();
+
+        }
+
+    }, 500);
+
+}
 
 
 refresh();

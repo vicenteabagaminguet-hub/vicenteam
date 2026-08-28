@@ -496,6 +496,43 @@ def create_pdf(ticker, cik, filing, temp_dir):
     )
 
     # ==================================================
+    # DECLARAR LA CODIFICACIÓN
+    # ==================================================
+    #
+    # El HTML se guarda en UTF-8. Si el documento no lo
+    # declara, Chrome lo interpreta como Windows-1252 y
+    # cada espacio duro del filing se imprime como "Â".
+
+    for meta in soup.find_all("meta"):
+
+        equiv = (
+            meta.get("http-equiv") or ""
+        ).lower()
+
+        if meta.get("charset") or equiv == "content-type":
+            meta.decompose()
+
+    head = soup.find("head")
+
+    if head is None:
+
+        head = soup.new_tag("head")
+
+        if soup.html:
+            soup.html.insert(0, head)
+
+        else:
+            soup.insert(0, head)
+
+    head.insert(
+        0,
+        soup.new_tag(
+            "meta",
+            charset="utf-8"
+        )
+    )
+
+    # ==================================================
     # GUARDAR HTML MODIFICADO
     # ==================================================
 
@@ -977,7 +1014,7 @@ def build_download():
             selected_forms
         )
 
-        return send_file(
+        response = send_file(
             zip_buffer,
             as_attachment=True,
             download_name=(
@@ -987,6 +1024,24 @@ def build_download():
             ),
             mimetype="application/zip"
         )
+
+        # Descargar un archivo no recarga la página, así
+        # que el navegador no puede saber por sí solo que
+        # el proceso terminó. Se le devuelve una señal en
+        # forma de cookie y la página la detecta.
+
+        token = request.form.get("token")
+
+        if token:
+
+            response.set_cookie(
+                "download_done",
+                token,
+                max_age=300,
+                path="/"
+            )
+
+        return response
 if __name__ == "__main__":
 
     print()

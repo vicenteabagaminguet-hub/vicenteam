@@ -524,6 +524,27 @@ def create_pdf(ticker, cik, filing, temp_dir):
 
         "--hide-scrollbars",
 
+        # Recorte de memoria: los servidores pequeños
+        # matan a Chromium si se pasa de 512 MB.
+
+        "--no-zygote",
+
+        "--renderer-process-limit=1",
+
+        "--js-flags=--max-old-space-size=256",
+
+        "--disable-extensions",
+
+        "--disable-background-networking",
+
+        "--disable-default-apps",
+
+        "--disable-sync",
+
+        "--no-first-run",
+
+        "--disable-features=Translate,BackForwardCache",
+
         "--allow-file-access-from-files",
 
         "--allow-universal-access-from-files",

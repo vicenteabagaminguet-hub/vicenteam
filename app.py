@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import zipfile
 import io
+import json
 import time
 from pathlib import Path
 from datetime import datetime
@@ -41,6 +42,41 @@ CACHE = {}
 CACHE_TTL = 6 * 60 * 60
 
 
+def sec_get(url, timeout=60):
+
+    # www.sec.gov responde 403 cuando considera que
+    # la IP ha hecho demasiadas peticiones. Suele ser
+    # temporal, así que se reintenta con pausas.
+
+    delays = [0, 3, 8]
+
+    last = None
+
+    for delay in delays:
+
+        if delay:
+            time.sleep(delay)
+
+        r = requests.get(
+            url,
+            headers=SEC_HEADERS,
+            timeout=timeout
+        )
+
+        if r.status_code not in (403, 429):
+            r.raise_for_status()
+            return r
+
+        last = r
+
+        print(
+            f"SEC {r.status_code} en {url}, "
+            "reintentando"
+        )
+
+    last.raise_for_status()
+
+
 def cached(key, builder):
 
     now = time.time()
@@ -57,7 +93,36 @@ def cached(key, builder):
     return value
 
 
+TICKER_FILE = Path("data") / "company_tickers.json"
+
+
 def get_ticker_map():
+
+    # www.sec.gov bloquea las IP compartidas de los
+    # servidores en la nube, así que el listado de
+    # empresas viaja dentro del repositorio.
+
+    return cached(
+        "tickers",
+        load_ticker_map
+    )
+
+
+def load_ticker_map():
+
+    if TICKER_FILE.exists():
+
+        return parse_ticker_map(
+            json.loads(
+                TICKER_FILE.read_text()
+            )
+        )
+
+    return download_ticker_map()
+
+
+def download_ticker_map():
+
     url = "https://www.sec.gov/files/company_tickers.json"
 
     r = requests.get(
@@ -68,7 +133,10 @@ def get_ticker_map():
 
     r.raise_for_status()
 
-    data = r.json()
+    return parse_ticker_map(r.json())
+
+
+def parse_ticker_map(data):
 
     result = {}
 
@@ -327,13 +395,7 @@ def create_pdf(ticker, cik, filing, temp_dir):
     filing_page = filing_url(cik, filing)
 
     # Descargar HTML
-    r = requests.get(
-        filing_page,
-        headers=SEC_HEADERS,
-        timeout=60
-    )
-
-    r.raise_for_status()
+    r = sec_get(filing_page)
 
     soup = BeautifulSoup(
         r.content,
@@ -367,13 +429,10 @@ def create_pdf(ticker, cik, filing, temp_dir):
 
         try:
 
-            image_response = requests.get(
+            image_response = sec_get(
                 image_url,
-                headers=SEC_HEADERS,
                 timeout=30
             )
-
-            image_response.raise_for_status()
 
             content_type = (
                 image_response.headers
@@ -544,6 +603,11 @@ def diag():
         "data.sec.gov": (
             "https://data.sec.gov/submissions/"
             "CIK0000320193.json"
+        ),
+        "archives": (
+            "https://www.sec.gov/Archives/edgar/data/"
+            "320193/000032019324000123/"
+            "aapl-20240928.htm"
         )
     }
 
@@ -631,6 +695,22 @@ def search():
             ticker=ticker,
             error=f"Could not reach EDGAR: {type(e).__name__}"
         )
+
+    if ticker not in ticker_map:
+
+        # Puede ser una empresa que cotiza desde hace
+        # poco y no está en la copia incluida.
+
+        try:
+
+            ticker_map = cached(
+                "tickers-live",
+                download_ticker_map
+            )
+
+        except Exception as e:
+
+            print("Listado en vivo no disponible:", e)
 
     if ticker not in ticker_map:
         return render_template(

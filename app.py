@@ -19,6 +19,10 @@ SEC_USER_AGENT = os.environ.get(
     "SEC Filing Scraper contacto@example.com"
 )
 
+# La SEC rechaza con 403 cualquier User-Agent que no
+# incluya una dirección de correo de contacto.
+SEC_UA_HAS_EMAIL = "@" in SEC_USER_AGENT
+
 SEC_HEADERS = {
     "User-Agent": SEC_USER_AGENT,
     "Accept-Encoding": "gzip, deflate",
@@ -586,12 +590,21 @@ def diag():
     # Comprueba qué responde la SEC al servidor.
     # No muestra el email del User-Agent.
 
+    domain = (
+        SEC_USER_AGENT.split("@")[-1].strip()
+        if SEC_UA_HAS_EMAIL
+        else None
+    )
+
     report = {
         "chrome": get_chrome(),
         "user_agent_configured": (
             SEC_USER_AGENT
             != "SEC Filing Scraper contacto@example.com"
         ),
+        "user_agent_has_email": SEC_UA_HAS_EMAIL,
+        "user_agent_domain": domain,
+        "user_agent_length": len(SEC_USER_AGENT),
         "checks": {}
     }
 
@@ -778,6 +791,57 @@ def search():
     methods=["POST"]
 )
 def download():
+
+    try:
+
+        return build_download()
+
+    except requests.HTTPError as e:
+
+        status = (
+            e.response.status_code
+            if e.response is not None
+            else "?"
+        )
+
+        hint = (
+            "The SEC_USER_AGENT setting has no email "
+            "address, and EDGAR rejects requests "
+            "without one."
+            if not SEC_UA_HAS_EMAIL
+            else "EDGAR is throttling this server. "
+                 "Wait a minute and try again."
+        )
+
+        return render_template(
+            "index.html",
+            current_year=datetime.now().year,
+            error=f"EDGAR refused the download "
+                  f"(HTTP {status}). {hint}"
+        ), 502
+
+    except subprocess.TimeoutExpired:
+
+        return render_template(
+            "index.html",
+            current_year=datetime.now().year,
+            error="Rendering timed out. Try fewer "
+                  "documents at once."
+        ), 504
+
+    except Exception as e:
+
+        print("Fallo en la descarga:", repr(e))
+
+        return render_template(
+            "index.html",
+            current_year=datetime.now().year,
+            error=f"Download failed: {type(e).__name__}. "
+                  "Try selecting fewer documents."
+        ), 500
+
+
+def build_download():
 
     ticker = request.form.get(
         "ticker",

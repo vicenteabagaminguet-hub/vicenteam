@@ -1,0 +1,555 @@
+{% extends "base.html" %}
+
+{% block title %}SEC Research Terminal — Pull every filing{% endblock %}
+
+
+{% block marquee %}
+
+<div class="marquee">
+
+    <div class="marquee-track">
+
+        {% for i in range(2) %}
+        <span>
+            <em>◆</em> 10-K · ANNUAL REPORT
+            <em>◆</em> 10-Q · QUARTERLY
+            <em>◆</em> 8-K · MATERIAL EVENT
+            <em>◆</em> DEF 14A · PROXY
+            <em>◆</em> FORM 4 · INSIDER TRADES
+            <em>◆</em> 20-F · FOREIGN ISSUER
+            <em>◆</em> S-1 · REGISTRATION
+        </span>
+        {% endfor %}
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+
+{% block body %}
+
+<!-- ==========================================
+     HERO
+     ========================================== -->
+
+<section class="shell hero">
+
+    <div>
+
+        <div class="eyebrow">
+            001 — Primary sources only
+        </div>
+
+        <h1>
+            Read what<br>
+            the company<br>
+            <span class="serif-it">actually</span> filed
+        </h1>
+
+        <p class="hero-sub">
+            Pull annual reports, quarterlies, proxies and insider forms
+            straight from SEC EDGAR — then export the exact documents
+            you need as print-ready PDFs, bundled in one archive.
+        </p>
+
+    </div>
+
+    <dl class="spec">
+
+        <div class="spec-row">
+            <dt>Source</dt>
+            <dd>SEC EDGAR · official</dd>
+        </div>
+
+        <div class="spec-row">
+            <dt>Coverage</dt>
+            <dd>1993 — {{ current_year }}</dd>
+        </div>
+
+        <div class="spec-row">
+            <dt>Form types</dt>
+            <dd>12</dd>
+        </div>
+
+        <div class="spec-row">
+            <dt>Output</dt>
+            <dd>PDF · ZIP</dd>
+        </div>
+
+        <div class="spec-row">
+            <dt>Cost</dt>
+            <dd>No account, no fee</dd>
+        </div>
+
+    </dl>
+
+</section>
+
+
+<!-- ==========================================
+     CONSOLA
+     ========================================== -->
+
+<section class="shell" id="console">
+
+    {% if error %}
+    <div class="flag">
+        {{ error }}
+    </div>
+    {% endif %}
+
+
+    <form
+        action="/search"
+        method="POST"
+        id="searchForm"
+        class="console">
+
+
+        <div class="console-head">
+
+            <span class="eyebrow">
+                Query builder
+            </span>
+
+            <span class="eyebrow">
+                Step 01 / 03
+            </span>
+
+        </div>
+
+
+        <!-- 01 · COMPAÑÍA -->
+
+        <div class="step">
+
+            <div class="step-label">
+
+                <span class="step-num">01</span>
+
+                <span class="step-name">Company</span>
+
+                <span class="step-hint">
+                    Ticker symbol as listed on a U.S. exchange.
+                </span>
+
+            </div>
+
+            <div>
+
+                <div class="ticker-field">
+
+                    <input
+                        type="text"
+                        name="ticker"
+                        id="ticker"
+                        value="{{ ticker or '' }}"
+                        placeholder="AAPL"
+                        autocomplete="off"
+                        spellcheck="false"
+                        required>
+
+                </div>
+
+                <div class="suggest">
+
+                    {% for t in ["AAPL", "MSFT", "NVDA", "BRK-B", "META", "JPM", "FICO"] %}
+                    <button
+                        type="button"
+                        class="chip"
+                        onclick="setTicker('{{ t }}')">
+                        {{ t }}
+                    </button>
+                    {% endfor %}
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- 02 · PERIODO -->
+
+        <div class="step">
+
+            <div class="step-label">
+
+                <span class="step-num">02</span>
+
+                <span class="step-name">Period</span>
+
+                <span class="step-hint">
+                    Filing date range. EDGAR goes back to 1993.
+                </span>
+
+            </div>
+
+            <div>
+
+                <div class="years">
+
+                    <div class="year-field">
+
+                        <label for="start_year">From</label>
+
+                        <input
+                            type="number"
+                            id="start_year"
+                            name="start_year"
+                            value="{{ current_year - 9 }}"
+                            min="1990"
+                            max="{{ current_year }}"
+                            required>
+
+                    </div>
+
+                    <div class="years-dash">—</div>
+
+                    <div class="year-field">
+
+                        <label for="end_year">To</label>
+
+                        <input
+                            type="number"
+                            id="end_year"
+                            name="end_year"
+                            value="{{ current_year }}"
+                            min="1990"
+                            max="{{ current_year }}"
+                            required>
+
+                    </div>
+
+                </div>
+
+                <div class="suggest">
+
+                    {% for n in [3, 5, 10, 15, 20] %}
+                    <button
+                        type="button"
+                        class="chip"
+                        data-span="{{ n }}"
+                        onclick="setYears({{ n }}, this)">
+                        Last {{ n }}Y
+                    </button>
+                    {% endfor %}
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- 03 · DOCUMENTOS -->
+
+        <div class="step">
+
+            <div class="step-label">
+
+                <span class="step-num">03</span>
+
+                <span class="step-name">Documents</span>
+
+                <span class="step-hint">
+                    Pick one or more form types to retrieve.
+                </span>
+
+            </div>
+
+            <div>
+
+                <div class="forms-grid">
+
+                    {% set catalog = [
+                        ("10-K",    "Annual report"),
+                        ("10-Q",    "Quarterly report"),
+                        ("8-K",     "Material event"),
+                        ("DEF 14A", "Proxy statement"),
+                        ("20-F",    "Foreign annual"),
+                        ("6-K",     "Foreign interim"),
+                        ("S-1",     "IPO registration"),
+                        ("S-3",     "Shelf offering"),
+                        ("S-4",     "M&A registration"),
+                        ("3",       "Insider · initial"),
+                        ("4",       "Insider · trade"),
+                        ("5",       "Insider · annual")
+                    ] %}
+
+                    {% for code, desc in catalog %}
+                    <label class="form-tile">
+
+                        <input
+                            type="checkbox"
+                            name="forms"
+                            value="{{ code }}">
+
+                        <span class="form-tile-dot"></span>
+
+                        <span class="form-tile-code">
+                            {% if code in ["3", "4", "5"] %}Form {{ code }}{% else %}{{ code }}{% endif %}
+                        </span>
+
+                        <span class="form-tile-desc">
+                            {{ desc }}
+                        </span>
+
+                    </label>
+                    {% endfor %}
+
+                </div>
+
+                <div class="suggest">
+
+                    <button
+                        type="button"
+                        class="chip"
+                        onclick="pickForms(['10-K','10-Q','8-K','DEF 14A'])">
+                        Core set
+                    </button>
+
+                    <button
+                        type="button"
+                        class="chip"
+                        onclick="pickForms(['3','4','5'])">
+                        Insider set
+                    </button>
+
+                    <button
+                        type="button"
+                        class="chip"
+                        onclick="pickForms('ALL')">
+                        Select all
+                    </button>
+
+                    <button
+                        type="button"
+                        class="chip"
+                        onclick="pickForms([])">
+                        Clear
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="console-foot">
+
+            <span class="eyebrow" id="summary">
+                No forms selected
+            </span>
+
+            <button type="submit" class="btn btn-acid btn-lg">
+                Run query
+                <span aria-hidden="true">→</span>
+            </button>
+
+        </div>
+
+    </form>
+
+
+    <!-- TIRA DE VALOR -->
+
+    <div class="value-strip">
+
+        <div class="value-cell">
+            <span class="eyebrow">A —</span>
+            <h3>Nothing rewritten</h3>
+            <p>
+                Documents come from the EDGAR archive exactly as the
+                company filed them. No summaries, no paraphrase,
+                no model in between you and the source.
+            </p>
+        </div>
+
+        <div class="value-cell">
+            <span class="eyebrow">B —</span>
+            <h3>Rendered, not scraped</h3>
+            <p>
+                Each filing is rendered with its own tables, exhibits
+                and images intact, then printed to PDF — readable
+                on screen and in the margin of a printout.
+            </p>
+        </div>
+
+        <div class="value-cell">
+            <span class="eyebrow">C —</span>
+            <h3>A decade in one archive</h3>
+            <p>
+                Select twenty years of 10-Ks and get a single ZIP,
+                named by ticker, year and form — ready to drop into
+                a research folder or a model.
+            </p>
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}
+
+
+{% block scripts %}
+
+<script>
+
+const currentYear = {{ current_year }};
+
+
+function setTicker(symbol) {
+
+    const field =
+        document.getElementById("ticker");
+
+    field.value = symbol;
+
+    field.focus();
+
+}
+
+
+function setYears(span, button) {
+
+    document.getElementById("end_year").value =
+        currentYear;
+
+    document.getElementById("start_year").value =
+        currentYear - span + 1;
+
+    document
+        .querySelectorAll(".chip[data-span]")
+        .forEach(
+            chip => chip.classList.remove("on")
+        );
+
+    if (button) {
+        button.classList.add("on");
+    }
+
+}
+
+
+function pickForms(list) {
+
+    document
+        .querySelectorAll('input[name="forms"]')
+        .forEach(box => {
+
+            box.checked =
+                list === "ALL" ||
+                list.includes(box.value);
+
+            paintTile(box);
+
+        });
+
+    refreshSummary();
+
+}
+
+
+function paintTile(box) {
+
+    box.closest(".form-tile")
+        .classList.toggle("is-on", box.checked);
+
+}
+
+
+function refreshSummary() {
+
+    const picked =
+        Array.from(
+            document.querySelectorAll(
+                'input[name="forms"]:checked'
+            )
+        ).map(box => box.value);
+
+    const label =
+        document.getElementById("summary");
+
+    label.textContent =
+        picked.length === 0
+            ? "No forms selected"
+            : picked.length +
+              " form type" +
+              (picked.length > 1 ? "s" : "") +
+              " selected — " +
+              picked.join(" · ");
+
+}
+
+
+document
+    .querySelectorAll('input[name="forms"]')
+    .forEach(box => {
+
+        box.addEventListener("change", function () {
+
+            paintTile(this);
+
+            refreshSummary();
+
+        });
+
+    });
+
+
+document
+    .getElementById("ticker")
+    .addEventListener("input", function () {
+
+        this.value =
+            this.value.toUpperCase();
+
+    });
+
+
+document
+    .getElementById("searchForm")
+    .addEventListener("submit", function (event) {
+
+        const picked =
+            document.querySelectorAll(
+                'input[name="forms"]:checked'
+            ).length;
+
+        if (picked === 0) {
+
+            event.preventDefault();
+
+            document
+                .getElementById("summary")
+                .textContent =
+                    "Select at least one form type to continue";
+
+            document
+                .querySelector(".forms-grid")
+                .scrollIntoView({
+                    behavior: "smooth",
+                    block: "center"
+                });
+
+            return;
+        }
+
+        showVeil(
+            "Querying EDGAR",
+            "Reading submission index · matching form types"
+        );
+
+    });
+
+
+refreshSummary();
+
+</script>
+
+{% endblock %}

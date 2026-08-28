@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ticker }} — filings {{ start_year }}–{{ end_year }}{% endblock %}
+
+
+{% block nav_action %}
+
+<a href="/" class="btn btn-ghost-sm">
+    New query
+</a>
+
+{% endblock %}
+
+
+{% block body %}
+
+<main class="shell">
+
+    <a href="/" class="back-link">
+        ← Back to query builder
+    </a>
+
+
+    <!-- ==========================================
+         MASTHEAD
+         ========================================== -->
+
+    <header class="masthead">
+
+        <div>
+
+            <div class="eyebrow">
+                Filing index
+            </div>
+
+            <h1>{{ ticker }}</h1>
+
+            <div class="masthead-company">
+                {{ company }}
+            </div>
+
+        </div>
+
+        <div class="masthead-period">
+            Period covered
+            <b>{{ start_year }} — {{ end_year }}</b>
+        </div>
+
+    </header>
+
+
+    <!-- ==========================================
+         MÉTRICAS
+         ========================================== -->
+
+    {% set form_list = filings | map(attribute="form") | unique | list %}
+
+    <section class="metrics">
+
+        <div class="metric">
+            <div class="metric-k">Filings found</div>
+            <div class="metric-v">
+                {{ "%03d"|format(filings|length) }}
+            </div>
+        </div>
+
+        <div class="metric">
+            <div class="metric-k">Selected</div>
+            <div class="metric-v acid" id="metricSelected">
+                000
+            </div>
+        </div>
+
+        <div class="metric">
+            <div class="metric-k">Form types</div>
+            <div class="metric-v">
+                {{ "%02d"|format(form_list|length) }}
+            </div>
+        </div>
+
+        <div class="metric">
+            <div class="metric-k">Latest filing</div>
+            <div class="metric-v">
+                {% if filings %}
+                    {{ filings[0].filing_date }}
+                {% else %}
+                    —
+                {% endif %}
+            </div>
+        </div>
+
+    </section>
+
+
+    <form
+        action="/download"
+        method="POST"
+        id="downloadForm">
+
+        <input type="hidden" name="ticker" value="{{ ticker }}">
+
+
+        <!-- ==========================================
+             FILTROS
+             ========================================== -->
+
+        <div class="rack">
+
+            <div class="rack-filters">
+
+                <button
+                    type="button"
+                    class="chip on"
+                    onclick="filterForms('ALL', this)">
+                    All
+                </button>
+
+                {% for form in form_list %}
+                <button
+                    type="button"
+                    class="chip"
+                    onclick="filterForms('{{ form }}', this)">
+                    {{ form }}
+                </button>
+                {% endfor %}
+
+            </div>
+
+            <label class="pick-all">
+
+                <input
+                    type="checkbox"
+                    id="pickAll"
+                    onchange="toggleAll()">
+
+                Select all visible
+
+            </label>
+
+        </div>
+
+
+        <!-- ==========================================
+             LEDGER
+             ========================================== -->
+
+        {% if filings %}
+
+        <div class="ledger-wrap">
+
+            <table class="ledger">
+
+                <thead>
+
+                    <tr>
+                        <th></th>
+                        <th>Form</th>
+                        <th>Period end</th>
+                        <th>Filed</th>
+                        <th>Accession no.</th>
+                        <th>Source</th>
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                {% for filing in filings %}
+
+                <tr class="filing-row" data-form="{{ filing.form }}">
+
+                    <td>
+                        <input
+                            type="checkbox"
+                            name="accession"
+                            value="{{ filing.accession }}">
+                    </td>
+
+                    <td>
+                        <span class="tag {% if filing.form in ['10-K', '20-F'] %}hot{% endif %}">
+                            {{ filing.form }}
+                        </span>
+                    </td>
+
+                    <td class="cell-mono">
+                        {{ filing.report_date or "—" }}
+                    </td>
+
+                    <td class="cell-mono strong">
+                        {{ filing.filing_date }}
+                    </td>
+
+                    <td class="cell-id">
+                        {{ filing.accession }}
+                    </td>
+
+                    <td>
+                        <a
+                            class="ext"
+                            href="https://www.sec.gov/Archives/edgar/data/{{ cik|int }}/{{ filing.accession.replace('-', '') }}/{{ filing.document }}"
+                            target="_blank"
+                            rel="noopener">
+                            EDGAR ↗
+                        </a>
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+        {% else %}
+
+        <div class="void">
+
+            <h2>No filings<br><span class="serif-it">in range</span></h2>
+
+            <p>
+                {{ ticker }} has no {{ start_year }}–{{ end_year }} filings
+                of the selected types on EDGAR. Widen the period or add
+                another form type.
+            </p>
+
+            <a href="/" class="btn btn-acid">
+                Adjust query →
+            </a>
+
+        </div>
+
+        {% endif %}
+
+
+        <!-- ==========================================
+             DOCK
+             ========================================== -->
+
+        <div class="dock" id="dock">
+
+            <div class="dock-count">
+                <b id="dockCount">0</b>
+                filings queued for export
+            </div>
+
+            <button type="submit" class="btn btn-acid" id="dockButton">
+                Download ZIP
+                <span aria-hidden="true">↓</span>
+            </button>
+
+        </div>
+
+    </form>
+
+</main>
+
+{% endblock %}
+
+
+{% block scripts %}
+
+<script>
+
+const boxes =
+    Array.from(
+        document.querySelectorAll(
+            'input[name="accession"]'
+        )
+    );
+
+
+function isVisible(box) {
+
+    return box.closest(".filing-row")
+        .style.display !== "none";
+
+}
+
+
+function refresh() {
+
+    let count = 0;
+
+    boxes.forEach(box => {
+
+        if (box.checked) {
+            count++;
+        }
+
+        box.closest(".filing-row")
+            .classList.toggle("picked", box.checked);
+
+    });
+
+
+    document.getElementById("metricSelected")
+        .textContent =
+            String(count).padStart(3, "0");
+
+    document.getElementById("dockCount")
+        .textContent = count;
+
+    document.getElementById("dock")
+        .classList.toggle("up", count > 0);
+
+
+    const visible =
+        boxes.filter(isVisible);
+
+    document.getElementById("pickAll").checked =
+        visible.length > 0 &&
+        visible.every(box => box.checked);
+
+}
+
+
+function toggleAll() {
+
+    const state =
+        document.getElementById("pickAll").checked;
+
+    boxes
+        .filter(isVisible)
+        .forEach(box => box.checked = state);
+
+    refresh();
+
+}
+
+
+function filterForms(form, button) {
+
+    document
+        .querySelectorAll(".rack-filters .chip")
+        .forEach(
+            chip => chip.classList.remove("on")
+        );
+
+    button.classList.add("on");
+
+
+    document
+        .querySelectorAll(".filing-row")
+        .forEach(row => {
+
+            row.style.display =
+                (form === "ALL" || row.dataset.form === form)
+                    ? ""
+                    : "none";
+
+        });
+
+    refresh();
+
+}
+
+
+boxes.forEach(box => {
+
+    box.addEventListener("change", refresh);
+
+});
+
+
+document
+    .getElementById("downloadForm")
+    .addEventListener("submit", function (event) {
+
+        const count =
+            boxes.filter(box => box.checked).length;
+
+        if (count === 0) {
+            event.preventDefault();
+            return;
+        }
+
+        showVeil(
+            "Rendering " + count + " document" + (count > 1 ? "s" : ""),
+            "Fetching from EDGAR · printing to PDF · this can take a minute"
+        );
+
+    });
+
+
+refresh();
+
+</script>
+
+{% endblock %}

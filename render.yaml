@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: sec-research-terminal
+    runtime: docker
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: SEC_USER_AGENT
+        sync: false

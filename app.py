@@ -19,7 +19,9 @@ SEC_USER_AGENT = os.environ.get(
 )
 
 SEC_HEADERS = {
-    "User-Agent": SEC_USER_AGENT
+    "User-Agent": SEC_USER_AGENT,
+    "Accept-Encoding": "gzip, deflate",
+    "Accept": "*/*"
 }
 
 OUTPUT_DIR = Path("downloads")
@@ -519,6 +521,61 @@ def index():
     )
 
 
+@app.route("/diag")
+def diag():
+
+    # Comprueba qué responde la SEC al servidor.
+    # No muestra el email del User-Agent.
+
+    report = {
+        "chrome": get_chrome(),
+        "user_agent_configured": (
+            SEC_USER_AGENT
+            != "SEC Filing Scraper contacto@example.com"
+        ),
+        "checks": {}
+    }
+
+    targets = {
+        "www.sec.gov": (
+            "https://www.sec.gov/files/"
+            "company_tickers.json"
+        ),
+        "data.sec.gov": (
+            "https://data.sec.gov/submissions/"
+            "CIK0000320193.json"
+        )
+    }
+
+    for name, url in targets.items():
+
+        try:
+
+            r = requests.get(
+                url,
+                headers=SEC_HEADERS,
+                timeout=30
+            )
+
+            report["checks"][name] = {
+                "status": r.status_code,
+                "bytes": len(r.content),
+                "body": (
+                    ""
+                    if r.status_code == 200
+                    else r.text[:300]
+                )
+            }
+
+        except Exception as e:
+
+            report["checks"][name] = {
+                "error": f"{type(e).__name__}: {str(e)[:200]}"
+            }
+
+    return report
+
+
 @app.route("/search", methods=["POST"])
 def search():
 
@@ -548,7 +605,32 @@ def search():
             error="Select at least one form type to continue."
         )
 
-    ticker_map = get_ticker_map()
+    try:
+
+        ticker_map = get_ticker_map()
+
+    except requests.HTTPError as e:
+
+        status = e.response.status_code if e.response is not None else "?"
+
+        return render_template(
+            "index.html",
+            current_year=datetime.now().year,
+            ticker=ticker,
+            error=(
+                f"EDGAR rejected the request (HTTP {status}). "
+                "Check the SEC_USER_AGENT setting."
+            )
+        )
+
+    except Exception as e:
+
+        return render_template(
+            "index.html",
+            current_year=datetime.now().year,
+            ticker=ticker,
+            error=f"Could not reach EDGAR: {type(e).__name__}"
+        )
 
     if ticker not in ticker_map:
         return render_template(
